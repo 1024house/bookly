@@ -1,20 +1,36 @@
+use anyhow::Result;
 use cookie::Cookie;
 use rinja::Template;
 use salvo::oapi::extract::*;
 use salvo::prelude::*;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
-use crate::entities::users::Model;
-use crate::entities::{prelude::Users, users};
 use crate::hoops::jwt;
-use crate::{db, json_ok, utils, AppResult, JsonResult};
+use crate::models::{SafeUser, User};
+use crate::{db, json_ok, utils, JsonResult};
+
+#[derive(Deserialize, Debug, Validate, ToSchema)]
+pub struct LoginRequest {
+    #[validate(length(min = 1, message = "username cannot be empty"))]
+    pub username: String,
+    #[validate(length(min = 1, message = "password cannot be empty"))]
+    pub password: String,
+}
+
+#[derive(Serialize, Debug, ToSchema)]
+pub struct LoginResponse {
+    pub user: SafeUser,
+    pub token: String,
+    pub exp: i64,
+}
+
+#[derive(Template)]
+#[template(path = "login.html")]
+struct LoginTemplate {}
 
 #[handler]
-pub async fn login_page(res: &mut Response) -> AppResult<()> {
-    #[derive(Template)]
-    #[template(path = "login.html")]
-    struct LoginTemplate {}
+pub async fn login_page(res: &mut Response) -> Result<()> {
     if let Some(cookie) = res.cookies().get("jwt_token") {
         let token = cookie.value().to_string();
         if jwt::decode_token(&token) {
@@ -44,40 +60,40 @@ pub async fn post_login(
     idata: JsonBody<LoginInData>,
     res: &mut Response,
 ) -> JsonResult<LoginOutData> {
-    let idata = idata.into_inner();
-    let conn = db::pool();
-    let Some(Model {
-        id,
-        username,
-        password,
-    }) = Users::find()
-        .filter(users::Column::Username.eq(idata.username))
-        .one(conn)
-        .await?
-    else {
-        return Err(StatusError::unauthorized()
-            .brief("User does not exist.")
-            .into());
-    };
+    let login_data = idata.into_inner();
+    let rb = db::engine();
 
-    if utils::verify_password(&idata.password, &password).is_err()
-    {
+    // Find user by username
+    let users = User::select_by_column(rb, "username", &login_data.username)
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    let user = users
+        .first()
+        .ok_or_else(|| StatusError::unauthorized().brief("User does not exist."))?;
+
+    // Verify password
+    if utils::verify_password(&login_data.password, &user.password).is_err() {
         return Err(StatusError::unauthorized()
-            .brief("Addount not exist or password is incorrect.")
+            .brief("Account not exist or password is incorrect.")
             .into());
     }
 
-    let (token, exp) = jwt::get_token(&id)?;
+    // Generate JWT token - using user ID as the token identifier
+    let (token, exp) = jwt::get_token(&user.id)?;
+
     let odata = LoginOutData {
-        id,
-        username,
-        token,
+        id: user.id.to_string(),
+        username: user.username.to_string(),
+        token: token.clone(),
         exp,
     };
-    let cookie = Cookie::build(("jwt_token", odata.token.clone()))
+
+    let cookie = Cookie::build(("jwt_token", token))
         .path("/")
         .http_only(true)
         .build();
     res.add_cookie(cookie);
+
     json_ok(odata)
 }

@@ -10,7 +10,6 @@ mod config;
 mod db;
 mod models;
 mod utils;
-mod entities;
 mod hoops;
 mod routers;
 

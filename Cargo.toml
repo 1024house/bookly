@@ -23,6 +23,8 @@ cookie = "0.18.0"
 dotenvy = "0.15.0"
 tracing-appender ="0.2.3"
 tracing-subscriber = {version = "0.3.19", features = ["std", "fmt", "env-filter", "tracing-log", "time", "local-time", "json"]}
-sea-orm = { version = "1", features = ["runtime-tokio-native-tls", "sqlx-mysql"]}
+rbatis = { version = "4.5"}
+rbs = { version = "4.5"}
+rbdc-mysql = { version = "4.5"}
 rinja = "0.3.5"
 rand = "0.8.3"

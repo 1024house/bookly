@@ -17,8 +17,8 @@ pub enum AppError {
     HttpParse(#[from] ParseError),
     #[error("anyhow error:`{0}`")]
     Anyhow(#[from] anyhow::Error),
-    #[error("seaorm db error:`{0}`")]
-    Seaorm(#[from] sea_orm::DbErr),
+    #[error("rbatis::Error:`{0}`")]
+    Rbatis(#[from] rbatis::Error),
     #[error("validation error:`{0}`")]
     Validation(#[from] validator::ValidationErrors),
 }
